@@ -21,8 +21,7 @@ class PreprocessEuroparl(sciluigi.Task):
                 TargetInfo(self, 'data/europarl/europarl-v7.fr-en.en') ]
 
     def run(self):
-        call('wc -l raw/europarl/*', shell=True)
-
+        call('mkdir data/europarl/', shell=True)
         xml, blank = src.preprocess.preprocess_europarl(self.in_europarl[0].path,
                 self.in_europarl[1].path,
                 self.out_preproc()[0].path,
@@ -30,7 +29,7 @@ class PreprocessEuroparl(sciluigi.Task):
         logging.info('Removed %d lines with xml' % xml)
         logging.info('Removed %d blank lines' % blank)
 
-        # get counts
+        call('wc -l raw/europarl/*', shell=True)
         call('wc -l data/europarl/*', shell=True)
         
 
