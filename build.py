@@ -8,8 +8,8 @@ from sciluigi import TargetInfo
 import src.preprocess
 
 class Europarl(sciluigi.ExternalTask):
-    target = sciluigi.Parameter(default='raw/europarl/europarl-v7.fr-en.fr')
-    source = sciluigi.Parameter(default='raw/europarl/europarl-v7.fr-en.en')
+    target = sciluigi.Parameter()
+    source = sciluigi.Parameter()
 
     def out_europarl(self):
         return [ TargetInfo(self, self.target),
@@ -39,18 +39,20 @@ class PreprocessEuroparl(sciluigi.Task):
 
 
 class Split(sciluigi.Task):
-    splits = sciluigi.Parameter(default=10000)
-    digits = sciluigi.Parameter(default=4)
+    splits = luigi.IntParameter()
+    digits = luigi.IntParameter(default=4)
 
     in_preproc = None 
 
     def out_splits(self):
         return [ TargetInfo(self, 'data/splits/%s' % ('%d' % i).zfill(self.digits)) \
-                for i in range(0, self.splits) ]
+                for i in range(0, 201) ]
 
     def run(self):
         self.ex('mkdir -p data/splits/')
-        self.ex('split -l %d -d %d %s > data/splits/' % (self.splits, self.digits, self.in_preproc[1])) 
+        self.ex('split -d -l %d -a %d %s data/splits/' %  \
+                (self.splits, self.digits, self.in_preproc[1].path)) 
+
 
 class ParseWithLogon(sciluigi.Task):
     in_splits = None
@@ -59,13 +61,17 @@ class ParseWithLogon(sciluigi.Task):
         pass
 
 
-class Run(sciluigi.WorkflowTask):
+class RunFRtoEN(sciluigi.WorkflowTask):
     def workflow(self):
-        europarl = self.new_task('Europarl', Europarl)
+        europarl = self.new_task('Europarl', Europarl,
+                source='raw/europarl/europarl-v7.fr-en.fr',
+                target='raw/europarl/europarl-v7.fr-en.en')
+
         preprocess = self.new_task('Preprocess Europarl', PreprocessEuroparl)
         preprocess.in_europarl = europarl.out_europarl()
 
-        split = self.new_task('Split Europarl', Split)
+        split = self.new_task('Split Europarl', Split,
+                splits=10000)
         split.in_preproc = europarl.out_europarl()
 
         return split
@@ -73,4 +79,4 @@ class Run(sciluigi.WorkflowTask):
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
-    luigi.run(main_task_cls=Run, local_scheduler=True)
+    luigi.run(main_task_cls=RunFRtoEN, local_scheduler=True)
