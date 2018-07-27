@@ -7,6 +7,7 @@ import sciluigi
 from sciluigi import TargetInfo
 
 import src.preprocess
+import src.export
 
 class Europarl(sciluigi.ExternalTask):
     target = sciluigi.Parameter()
@@ -37,6 +38,12 @@ class PreprocessEuroparl(sciluigi.Task):
         call('wc -l raw/europarl/*', shell=True)
         logging.info('Line count of preprocessed:')
         call('wc -l data/pre/preprocess/*', shell=True)
+
+
+# TODO filter english sentences to parse based on
+# sentences that are already parsed...
+class FilterParsed(sciluigi.Task):
+    pass
 
 
 class Split(sciluigi.Task):
@@ -71,13 +78,13 @@ class ParseWithPET(sciluigi.Task):
                 for i in range(0, self.splits) ]
 
     def run(self):
-        #clear tsdb results
-        self.ex('rm -r %s || true' % os.path.join(self.tsdb, '*'))
-        self.ex('rm log/slurm/* || true')
-
         logging.info('Send jobs? [Y|n]')
         if input() == 'n':
             exit()
+
+        #clear tsdb results
+        self.ex('rm -r %s || true' % os.path.join(self.tsdb, '*'))
+        self.ex('rm log/slurm/* || true')
 
         if self.compute == 'blake':
             # The following code is specific to blake2.cs.umass.edu
@@ -86,9 +93,9 @@ class ParseWithPET(sciluigi.Task):
             split_idx = int(self.splits * 0.66)
 
             self.ex(('sbatch --array=0-%d --ntasks=24 --mem=48G --export=digits=%d,ntasks=%d ' \
-                    '--exclude=compute-0-[3-4] ./src/parse.sh') % (split_idx, self.digits, 24))
+                    '--exclude=compute-0-[3-4] --nice ./slurm/parse.sh') % (split_idx, self.digits, 24))
             self.ex(('sbatch --array=%d-%d --ntasks=48 --mem=96G --export=digits=%d,ntasks=%d ' \
-                    '--exclude=compute-1-[0-15] ./src/parse.sh') % (split_idx+1, self.splits, self.digits, 48))
+                    '--exclude=compute-1-[0-15] --nice ./slurm/parse.sh') % (split_idx+1, self.splits, self.digits, 48))
 
             logging.info('Luigi will quit now. Monitor the slurm jobs and restart luigi' \
                     ' when they are finished.')
@@ -106,6 +113,10 @@ class FilterParallelData(sciluigi.Task):
     pass
 
 
+class Shuffle(sciluigi.Task):
+    pass
+
+
 class RunFRtoEN(sciluigi.WorkflowTask):
     def workflow(self):
         europarl = self.new_task('Europarl', Europarl,
@@ -116,7 +127,7 @@ class RunFRtoEN(sciluigi.WorkflowTask):
         preprocess.in_europarl = europarl.out_europarl()
 
         # parse and filter
-        splits = 200
+        splits = 300
         split = self.new_task('Split Europarl', Split,
                 splits=splits)
         split.in_preproc = preprocess.out_preproc()
