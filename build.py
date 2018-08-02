@@ -6,8 +6,7 @@ import luigi
 import sciluigi
 from sciluigi import TargetInfo
 
-import src.preprocess
-import src.export
+import src.preprocess, src.filter, src.shuffle
 
 class Europarl(sciluigi.ExternalTask):
     target = sciluigi.Parameter()
@@ -53,12 +52,12 @@ class Split(sciluigi.Task):
     in_preproc = None 
 
     def out_splits(self):
-        return [ TargetInfo(self, 'data/splits/%s' % ('%d' % i).zfill(self.digits)) \
+        return [ TargetInfo(self, 'data/pre/splits/%s' % ('%d' % i).zfill(self.digits)) \
                 for i in range(0, self.splits) ]    #need to figure out how to get 201 programmatically
 
     def run(self):
-        self.ex('mkdir -p data/splits/')
-        self.ex('split -d -l $((`wc -l < %s`/%d)) -a %d %s data/splits/' %  \
+        self.ex('mkdir -p data/pre/splits/')
+        self.ex('split -d -l $((`wc -l < %s`/%d)) -a %d %s data/pre/splits/' %  \
                 (self.in_preproc[1].path, self.splits, self.digits, self.in_preproc[1].path)) 
 
 
@@ -106,15 +105,63 @@ class ParseWithPET(sciluigi.Task):
 
 
 class ExportFromTSDB(sciluigi.Task):
-    pass
+    in_parse = None
+
+    outdir = luigi.Parameter(default='data/export')
+
+    splits = luigi.IntParameter()
+    digits = luigi.IntParameter(default=4)
+
+    def out_export(self):
+        return [ TargetInfo(self, os.path.join(self.outdir, str(i).zfill(self.digits))) \
+                for i in range(0, self.splits) ]
+
+    def run(self):
+        self.ex('mkdir -p data/export')
+        self.ex('rm log/slurm/* || true')
+
+        self.ex('sbatch --array=0-%d --export=digits=%d,OUTPUT_DIR=%s --nice ./slurm/export.sh' %
+                (self.splits, self.digits, self.outdir))
+
+        logging.info('Luigi will quit now. Monitor the slurm jobs and restart luigi' \
+                    ' when they are finished.')
+        call('squeue', shell=True)
+        exit()
 
 
 class FilterParallelData(sciluigi.Task):
-    pass
+    in_preproc = None
+    in_export = None
+
+    def out_filter(self):
+        return [ TargetInfo(self, 'data/pre/decided/source'),
+                TargetInfo(self, 'data/pre/decided/target') ]
+
+    def run(self):
+        self.ex('mkdir -p data/pre/decided/')
+        [ src.filter.build(export.path) for export in self.in_export ]
+        src.filter.decide(self.in_preproc[0].path,
+                self.in_preproc[1].path,
+                self.out_filtered()[0].path,
+                self.out_filtered()[1].path)
+
+        logging.info('Line count of data:')
+        call('wc -l data/pre/decided/*', shell=True)
 
 
-class Shuffle(sciluigi.Task):
-    pass
+class ShuffleParallelData(sciluigi.Task):
+    in_parallel = None
+
+    def out_shuffle(self):
+        return [ TargetInfo(self, 'data/pre/shuffled/source'),
+                TargetInfo(self, 'data/pre/shuffled/target') ]
+
+    def run(self):
+        self.ex('mkdir -p data/pre/shuffled/')
+        src.shuffle.parallel_shuffle(self.in_parallel[0].path,
+                self.in_parallel[1].path,
+                self.out_shuffle()[0].path,
+                self.out_shuffle()[1].path)
 
 
 class RunFRtoEN(sciluigi.WorkflowTask):
@@ -134,12 +181,20 @@ class RunFRtoEN(sciluigi.WorkflowTask):
 
         pre_parse = self.new_task('Parse input with PET', ParseWithPET,
                 splits=splits)
-        pre_parse.in_splits = split.out_splits()[:2]
+        pre_parse.in_splits = split.out_splits()
 
-        # train nmt
-        #
+        export = self.new_task('Export parses', ExportFromTSDB,
+                splits=splits)
+        export.in_parse = pre_parse.out_parse()
 
-        return pre_parse
+        flter = self.new_task('Filter parallel data', FilterParallelData)
+        flter.in_preproc = preprocess.out_preproc()
+        flter.in_export = export.out_export()
+
+        shuffle = self.new_task('Shuffle parallel data', ShuffleParallelData)
+        shuffle.in_parallel = flter.out_filter()
+
+        return shuffle
 
 
 if __name__ == '__main__':
