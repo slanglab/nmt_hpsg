@@ -97,26 +97,23 @@ class TrainAttentionSeq2Seq(sciluigi.Task):
     in_train = None
 
     def out_model(self):
-        return TargetInfo(self, './none')
+        return TargetInfo(self, './data/translate/models/model.npz')
 
 
     def run(self):
         self.ex('mkdir -p data/translate/models')
-        self.ex('rm log/slurm/* || true')
-
-        logging.info('Send jobs? [Y|n]')
-        if input() == 'n':
-            exit()
-
-        self.ex('sbatch slurm/train.sh')
-        call('squeue', shell=True)
-        logging.info('Luigi will quit now. Monitor the slurm jobs and restart luigi' \
-            ' when they are finished.')
-        exit()
+        self.ex('sbatch --wait slurm/train.sh')
 
 
 class TestTranslations(sciluigi.Task):
-    pass
+    in_model = None
+
+    def out_translations(self):
+        return TargetInfo(self, 'data/translate/output/translations')
+
+    def run(self):
+        self.ex('mkdir -p data/translate/output/')
+        self.ex('sbatch --wait slurm/translate.sh')
 
 
 class Translate(sciluigi.WorkflowTask):
@@ -136,7 +133,10 @@ class Translate(sciluigi.WorkflowTask):
         train = self.new_task('Train Nematus', TrainAttentionSeq2Seq)
         train.in_train = splits.out_splits()
 
-        return train
+        translate = self.new_task('Train Nematus', TestTranslations)
+        translate.in_model = train.out_model()
+
+        return translate
 
 
 if __name__ == '__main__':
