@@ -7,7 +7,7 @@
 #SBATCH --error=log/slurm/parse_%A_%a.err
 
 LOGON_ROOT=./logon
-INPUT_DIR=./data/splits
+INPUT_DIR=./data/parse/splits
 TASK_ID=$(printf '%0'$digits'd' $SLURM_ARRAY_TASK_ID)
 
 kill $(ps -aux | grep pvmd | head -1 | sed 's/\s\+/\t/g' | cut -f2)

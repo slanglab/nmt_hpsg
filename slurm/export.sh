@@ -4,8 +4,8 @@
 #SBATCH --nodes=1 --ntasks=1
 #SBATCH --time=30:00
 #SBATCH --mem=200MB
-#SBATCH --output=log/slurm/pre_%A_%a.out
-#SBATCH --error=log/slurm/pre_%A_%a.err
+#SBATCH --output=log/slurm/export_%a.out
+#SBATCH --error=log/slurm/export_%a.err
 
 INPUT_DIR=./logon/lingo/lkb/src/tsdb/home/erg/1214
 OUTPUT_DIR=./data/export
