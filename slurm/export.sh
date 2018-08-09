@@ -8,10 +8,10 @@
 #SBATCH --error=log/slurm/export_%a.err
 
 INPUT_DIR=./logon/lingo/lkb/src/tsdb/home/erg/1214
-OUTPUT_DIR=./data/export
 TASK_ID=$(printf '%0'$digits'd' $SLURM_ARRAY_TASK_ID)
 
-source activate nmt_hpsg
+. /home/jwei/miniconda3/etc/profile.d/conda.sh
+conda activate base
 echo $TASK_ID
 
 python src/wikiwoods.py \
