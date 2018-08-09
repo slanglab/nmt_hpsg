@@ -97,10 +97,11 @@ class TrainAttentionSeq2Seq(sciluigi.Task):
     in_train = None
 
     def out_model(self):
-        return TargetInfo(self, './data/translate/models/model.npz')
+        return TargetInfo(self, './data/translate/models/model.npz.json')
 
 
     def run(self):
+        exit()
         self.ex('mkdir -p data/translate/models')
         self.ex('sbatch --wait slurm/train.sh')
 
@@ -108,15 +109,32 @@ class TrainAttentionSeq2Seq(sciluigi.Task):
 class TestTranslations(sciluigi.Task):
     in_model = None
 
+    splits = luigi.IntParameter(default=20)
+    digits = luigi.IntParameter(default=4)
+
     def out_translations(self):
-        return TargetInfo(self, 'data/translate/output/translations')
+        return TargetInfo(self, 'data/translate/output/translations.out')
 
     def run(self):
+        # make splits
+        test_source = 'data/translate/splits/analysis.source'
+        self.ex('mkdir -p data/translate/splits/test_splits')
+        self.ex('split -d -l $((`wc -l < %s`/%d)) -a %d %s data/translate/splits/test_splits/' %  \
+                (test_source, self.splits, self.digits, test_source)) 
+
         self.ex('mkdir -p data/translate/output/')
-        self.ex('sbatch --wait slurm/translate.sh')
+        self.ex('mkdir -p data/translate/output/output_splits')
+        self.ex('sbatch --array=0-%d --export=digits=%d --nice --wait slurm/translate.sh' % \
+                (self.splits, self.digits))
+
+        # concat in order
+        self.ex('cat data/translate/output/output_splits/* > data/translate/output/translations.out')
 
 
-class Translate(sciluigi.WorkflowTask):
+class TrainAndTranslate(sciluigi.WorkflowTask):
+    def out_translations(self):
+        return TargetInfo(self, 'data/translate/output/translations.out')
+
     def workflow(self):
         parallel = self.new_task('Parallel data', ParallelData,
                 source='data/pre/shuffled/source',
@@ -133,7 +151,7 @@ class Translate(sciluigi.WorkflowTask):
         train = self.new_task('Train Nematus', TrainAttentionSeq2Seq)
         train.in_train = splits.out_splits()
 
-        translate = self.new_task('Train Nematus', TestTranslations)
+        translate = self.new_task('Translate with Nematus', TestTranslations)
         translate.in_model = train.out_model()
 
         return translate
