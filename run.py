@@ -6,6 +6,8 @@ import luigi
 import sciluigi
 from sciluigi import TargetInfo
 
+from parse import Parse
+from translate import TrainAndTranslate
 import src.preprocess, src.filter, src.shuffle
 
 class Europarl(sciluigi.ExternalTask):
@@ -74,37 +76,72 @@ class ShuffleParallelData(sciluigi.Task):
                 self.out_shuffle()[1].path)
 
 
+class Pick(sciluigi.Task):
+    in_translations = None
+
+    def out_pick(self):
+        return [ TargetInfo(self, 'data/translate/output/argmax.out'),
+                TargetInfo(self, 'data/translate/output/argmax.txt') ]
+
+    def run(self):
+        self.ex("awk 'NR == 1 || NR %% 5 == 1' %s > %s" % 
+                (self.in_translations.path, self.out_pick()[0].path))
+        self.ex('cat data/translate/output/argmax.out | sed "s/ ||| /|/g" | cut -f2 -d "|" > %s' % self.out_pick()[1].path)
+
+
+class ReplaceUnknowns(sciluigi.Task):
+    in_pick = None
+
+    def out_replace(self):
+        return TargetInfo(self, 'data/post/replaced/to_parse')
+
+    def run(self):
+        self.ex('mkdir -p data/post/')
+        self.ex('mkdir -p data/post/replaced')
+        self.ex('cat %s | python src/unknowns.py > %s' %
+                (self.in_pick[1].path, self.out_replace().path))
+
+
 class RunFRtoEN(sciluigi.WorkflowTask):
     def workflow(self):
         europarl = self.new_task('Europarl', Europarl,
                 source='raw/europarl/europarl-v7.fr-en.fr',
                 target='raw/europarl/europarl-v7.fr-en.en')
 
+        # pre
         preprocess = self.new_task('Preprocess Europarl', PreprocessEuroparl)
         preprocess.in_europarl = europarl.out_europarl()
 
-        # parse and filter
-        splits = 300
-        split = self.new_task('Split Europarl', Split,
-                splits=splits)
-        split.in_preproc = preprocess.out_preproc()
-
-        pre_parse = self.new_task('Parse input with PET', ParseWithPET,
-                splits=splits)
-        pre_parse.in_splits = split.out_splits()
-
-        export = self.new_task('Export parses', ExportFromTSDB,
-                splits=splits)
-        export.in_parse = pre_parse.out_parse()
+        pre_parse = self.new_task('Parse training+test data', Parse,
+                text='data/pre/preprocess/target',
+                run='pre-parse',
+                splits=300)
 
         flter = self.new_task('Filter parallel data', FilterParallelData)
         flter.in_preproc = preprocess.out_preproc()
-        flter.in_export = export.out_export()
+        flter.in_export = pre_parse.out_export()
 
         shuffle = self.new_task('Shuffle parallel data', ShuffleParallelData)
         shuffle.in_parallel = flter.out_filter()
 
-        return shuffle
+        # nematus
+        train = self.new_task('Train and translate', TrainAndTranslate)
+
+        pick = self.new_task('Pick out best translations', Pick)
+        pick.in_translations = train.out_translations()
+
+        # post
+        replace = self.new_task('Replace unknowns', ReplaceUnknowns)
+        replace.in_pick = pick.out_pick()
+
+        post_parse = self.new_task('Parse translations', Parse,
+                text=replace.out_replace().path,
+                nrun='post-parse',
+                splits=50)
+
+        # prepare analysis
+
+        return post_parse
 
 
 if __name__ == '__main__':
