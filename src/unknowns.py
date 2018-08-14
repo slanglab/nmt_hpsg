@@ -5,8 +5,11 @@ with open('src/unknowns.map', 'rt') as fh:
     for line in fh:
         unks.append(line.strip().split())
 
-s = sys.stdin.read()
-for unk in unks:
-    s = s.replace(unk[0], unk[1])
+def replace_unk(s):
+    for unk in unks:
+        s = s.replace(unk[0], unk[1])
+    return s
 
-print(s)
+if __name__ == '__main__':
+    s = sys.stdin.read()
+    print(replace_unk(s))

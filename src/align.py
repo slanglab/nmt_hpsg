@@ -1,7 +1,10 @@
 import os
 import re
 import math
+import itertools
 from collections import defaultdict
+
+from unknowns import replace_unk
 
 class MLEUnigramModel:
     def __init__(self, train_file):
@@ -32,8 +35,7 @@ def left_to_right_traversal(s):
 
     return traversal
 
-
-def create_dict(export_dir):
+def create_dict(export_dir, export_field):
     # read in db
     db = {}
     for fn in sorted(os.listdir(export_dir)):
@@ -45,7 +47,8 @@ def create_dict(export_dir):
 
         for line in h:
             line = line.strip().split('\t')
-            db[line[0]] = left_to_right_traversal(line[1]) if line[1] != 'NA' else 'NA'
+            db[line[export_field]] = left_to_right_traversal(line[1]) if line[1] != 'NA' else 'NA'
+            #db[line[export_field]] = line[1]
             
     print('Read in %d parses.' % len(db))
 
@@ -56,26 +59,36 @@ def create_dict(export_dir):
 
 def main(source, reference, translation, ref_export, trans_export, output='data/analysis/data.tsv'):
     unigram = MLEUnigramModel(source)
-    source, reference = open(source), open(reference)
+    source = open(source)
+    reference = open(reference)
+    reference_no_tok = iter(open('data/pre/shuffled/target').readlines()[1400754:])   # this is a hack...
     translation = (i.split(' ||| ') for i in open(translation))
-    ref_query, trans_query = create_dict(ref_export), create_dict(trans_export)
+    ref_query, trans_query = create_dict(ref_export, 2), create_dict(trans_export, 0)
 
     output = open(output, 'wt')
 
-    for source, ref, trans in zip(source, reference, translation):
+    i = 0
+    for src, ref, trans in zip(source, reference, translation):
         row = []
 
-        source, ref, trans[1] = source.strip(), ref.strip(), trans[1].strip()
+        src, ref, trans[1], trans[2] = \
+                src.strip(), ref.strip(), trans[1].strip(), trans[2].strip()
 
-        row.append(source)
-        row.append(str(unigram.score(source)))
+        row.append(src)
         row.append(ref)
-        row.append(ref_query(ref))
         row.append(trans[1])
-        row.append(trans_query(trans[1]))
+        #row.append(ref_query(ref))
+        row.append(ref_query(next(reference_no_tok).strip()))
+        row.append(trans_query(replace_unk(trans[1])))
+        row.append(str(unigram.score(src)))
         row.append(trans[2])
 
+        if row[3] == 'error' or row[4] == 'error':
+            i += 1
+
         output.write('\t'.join(row) + '\n')
+
+    print('We had %d errors in total.' % i)
 
 
 if __name__ == '__main__':
