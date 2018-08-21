@@ -8,16 +8,18 @@ from delphin.itsdb import unescape
 from delphin.derivation import Derivation, UdfTerminal, UdfToken
 
 parser = argparse.ArgumentParser(description='Export out TSDB databases to TSV.')
-parser.add_argument('-directory', type=str,
+parser.add_argument('-d', '--directory', type=str,
         help='The directory of the tsdb database.')
-parser.add_argument('-output', type=str,
+parser.add_argument('-o', '--output', type=str,
        help='The output name of the tsv.')
-parser.add_argument('-na', action='store_true',
+parser.add_argument('-n', '--includena', action='store_true',
         help='Include sentences without valid parses.')
-parser.add_argument('-derivation', action='store_true',
+parser.add_argument('-r', '--derivation', action='store_true',
         help='Include derivations.')
-parser.add_argument('-preprocess', action='store_true',
+parser.add_argument('-p', '--preprocess', action='store_true',
         help='Include sentences with their unk\'ed entries.')
+parser.add_argument('-e', '--parser-error', action='store_true',
+        help='Include parser error messages.')
 args = parser.parse_args()
 
 #STEP 1
@@ -111,7 +113,7 @@ for i, fn in enumerate(os.listdir(args.directory)):
     prof = itsdb.TestSuite(os.path.join(args.directory, fn, 'pet/'))
     id_to_parse = { result['parse-id'] : result['derivation'] for result in prof['result'] }
 
-    for item in prof['item']:
+    for item, parse in zip(prof['item'], prof['parse']):
         attr = []
 
         #input
@@ -121,21 +123,30 @@ for i, fn in enumerate(os.listdir(args.directory)):
         #derivation
         deriv = id_to_parse.get(item['i-id'], 'NA')
         if args.derivation:
-            attr.append(deriv)
+            attr.append(deriv.strip())
         
         #na
-        if not args.na and deriv == 'NA':
-            continue
+        if not args.includena:
+            if deriv == 'NA':
+                continue
 
         #preprocess unk string
         if deriv != 'NA':
             preproc = preprocess(inp, deriv)
+            
+            if args.preprocess:
+                attr.append(preproc)
+
+            if args.parser_error:
+                attr.append('NA')
+
         else:
             preproc = None
-        
-        if args.preprocess and deriv == 'NA':
-            attr.append('NA')
-        if args.preprocess and deriv != 'NA':
-            attr.append(preproc)
+
+            if args.preprocess:
+                attr.append('NA')
+
+            if args.parser_error:
+                attr.append(parse['error'])
 
         output.write('\t'.join(attr) + '\n')

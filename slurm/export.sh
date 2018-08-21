@@ -15,8 +15,9 @@ conda activate base
 echo $TASK_ID
 
 python src/wikiwoods.py \
-    -directory $INPUT_DIR/$TASK_ID \
-    -output $OUTPUT_DIR/$TASK_ID \
-    -derivation \
-    -preprocess \
-    -na
+    --directory $INPUT_DIR/$TASK_ID \
+    --output $OUTPUT_DIR/$TASK_ID \
+    --derivation \
+    --preprocess \
+    --includena \
+    --parser-error
