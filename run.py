@@ -8,7 +8,7 @@ from sciluigi import TargetInfo
 
 from parse import Parse
 from translate import TrainAndTranslate
-import src.preprocess, src.filter, src.shuffle
+import src.preprocess, src.filter, src.shuffle, src.align
 
 class Europarl(sciluigi.ExternalTask):
     target = sciluigi.Parameter()
@@ -102,6 +102,21 @@ class ReplaceUnknowns(sciluigi.Task):
                 (self.in_pick[1].path, self.out_replace().path))
 
 
+class AlignForAnalysis(sciluigi.Task):
+    in_data = None
+
+    def out_align(self):
+        return TargetInfo(self, 'data/analysis/data.tsv')
+
+    def run(self):
+        src.align.main(
+            'data/translate/splits/analysis.source',
+            'data/translate/splits/analysis.target',
+            'data/translate/output/argmax.out',
+            'data/export/pre-parse/',
+            'data/export/post-parse/'
+        )
+
 class RunFRtoEN(sciluigi.WorkflowTask):
     def workflow(self):
         europarl = self.new_task('Europarl', Europarl,
@@ -113,9 +128,9 @@ class RunFRtoEN(sciluigi.WorkflowTask):
         preprocess.in_europarl = europarl.out_europarl()
 
         pre_parse = self.new_task('Parse training+test data', Parse,
-                text='data/pre/preprocess/target',
                 run='pre-parse',
                 splits=300)
+        pre_parse.in_text = preprocess.out_preproc()
 
         flter = self.new_task('Filter parallel data', FilterParallelData)
         flter.in_preproc = preprocess.out_preproc()
@@ -126,6 +141,7 @@ class RunFRtoEN(sciluigi.WorkflowTask):
 
         # nematus
         train = self.new_task('Train and translate', TrainAndTranslate)
+        train.in_data = shuffle.out_shuffle()
 
         pick = self.new_task('Pick out best translations', Pick)
         pick.in_translations = train.out_translations()
@@ -135,13 +151,15 @@ class RunFRtoEN(sciluigi.WorkflowTask):
         replace.in_pick = pick.out_pick()
 
         post_parse = self.new_task('Parse translations', Parse,
-                text=replace.out_replace().path,
                 nrun='post-parse',
                 splits=50)
+        post_parse.in_text = replace.out_replace()
 
         # prepare analysis
+        align = self.new_task('Align results for analysis', AlignForAnalysis)
+        align.in_data = post_parse.out_export()
 
-        return post_parse
+        return align
 
 
 if __name__ == '__main__':

@@ -46,19 +46,19 @@ def create_dict(export_dir, export_field):
         h = open(os.path.join(export_dir, fn))
 
         for line in h:
-            line = line.strip().split('\t')
-            db[line[export_field]] = left_to_right_traversal(line[1]) if line[1] != 'NA' else 'NA'
-            #db[line[export_field]] = line[1]
-            
+            line = line.strip('\n').split('\t')
+            line[1] = left_to_right_traversal(line[1]) if line[1] != 'NA' else 'NA'
+            db[line[export_field]] = line
+
     print('Read in %d parses.' % len(db))
 
     def query(s, db):
-        return db.get(s, 'error')
+        return db.get(s, ['error'] * 4)
     return lambda s: query(s, db)
 
 
 def main(source, reference, translation, ref_export, trans_export, output='data/analysis/data.tsv'):
-    unigram = MLEUnigramModel(source)
+    unigram = MLEUnigramModel('data/translate/splits/train.source')
     source = open(source)
     reference = open(reference)
     reference_no_tok = iter(open('data/pre/shuffled/target').readlines()[1400754:])   # this is a hack...
@@ -74,16 +74,20 @@ def main(source, reference, translation, ref_export, trans_export, output='data/
         src, ref, trans[1], trans[2] = \
                 src.strip(), ref.strip(), trans[1].strip(), trans[2].strip()
 
+        rq = ref_query(next(reference_no_tok).strip())
+        tq = trans_query(replace_unk(trans[1]))
+
         row.append(src)
         row.append(ref)
         row.append(trans[1])
         #row.append(ref_query(ref))
-        row.append(ref_query(next(reference_no_tok).strip()))
-        row.append(trans_query(replace_unk(trans[1])))
+        row.append(rq[1])
+        row.append(tq[1])
+        row.append(tq[3])
         row.append(str(unigram.score(src)))
         row.append(trans[2])
 
-        if row[3] == 'error' or row[4] == 'error':
+        if tq[1] == 'error' or rq[1] == 'error':
             i += 1
 
         output.write('\t'.join(row) + '\n')

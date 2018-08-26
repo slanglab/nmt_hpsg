@@ -101,8 +101,9 @@ class ExportFromTSDB(sciluigi.Task):
 
 
 class Parse(sciluigi.WorkflowTask):
+    in_text = None
+
     nrun = luigi.Parameter(default=datetime.datetime.now().strftime("%Y-%m-%d"))
-    text = luigi.Parameter()
     splits = luigi.IntParameter()
     digits = luigi.IntParameter(default=4)
 
@@ -111,13 +112,10 @@ class Parse(sciluigi.WorkflowTask):
                 for i in range(0, self.splits) ]
 
     def workflow(self):
-        external = self.new_task('External Text', Text,
-                text=self.text)
-
         splits = self.splits
         split = self.new_task('Split', Split,
                 splits=splits)
-        split.in_data = external.out_data()
+        split.in_data = self.in_text
 
         parse = self.new_task('Parse input with PET', ParseWithPET,
                 splits=splits)

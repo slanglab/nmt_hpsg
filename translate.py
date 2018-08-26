@@ -32,18 +32,24 @@ class PreprocessNematus(sciluigi.Task):
         self.ex('mkdir -p data/translate/preprocess/')
 
         if False:
-            logging.info('Tokenizing source and target data.')
-            self.ex('perl nematus/data/tokenizer.perl -threads 5 -l %s < %s > data/translate/preprocess/source.tok' % (self.src_lang, self.in_parallel[0].path))
-            self.ex('perl nematus/data/tokenizer.perl -threads 5 -l %s < %s > data/translate/preprocess/target.tok.ul' % (self.trg_lang, self.in_parallel[1].path))
+            logging.info('Lowercasing and tokenizing source and target data.')
+            self.ex('perl nematus/data/lowercase.perl < %s | \
+                    perl nematus/data/tokenizer.perl -threads 5 -l %s > data/translate/preprocess/source.tok' \
+                    % (self.in_parallel[0].path, self.src_lang))
+            self.ex('perl nematus/data/lowercase.perl < %s | \
+                    perl nematus/data/tokenizer.perl -threads 5 -l %s > data/translate/preprocess/target.tok.ul' \
+                    % (self.in_parallel[1].path, self.trg_lang))
 
         # underline fix
         self.ex("cat data/translate/preprocess/target.tok.ul | sed 's/ _ /_/g' > \
                 data/translate/preprocess/target.tok")
 
         logging.info('Building vocabularies.')
-        self.ex('(source activate nematus && python nematus/data/build_dictionary.py \
+        self.ex('(. /home/jwei/miniconda3/etc/profile.d/conda.sh && conda activate nematus \
+                && python nematus/data/build_dictionary.py \
                 data/translate/preprocess/source.tok)')
-        self.ex('(source activate nematus && python nematus/data/build_dictionary.py \
+        self.ex('(. /home/jwei/miniconda3/etc/profile.d/conda.sh && conda activate nematus \
+                && python nematus/data/build_dictionary.py \
                 data/translate/preprocess/target.tok)')
 
 
@@ -101,7 +107,6 @@ class TrainAttentionSeq2Seq(sciluigi.Task):
 
 
     def run(self):
-        exit()
         self.ex('mkdir -p data/translate/models')
         self.ex('sbatch --wait slurm/train.sh')
 
@@ -132,6 +137,8 @@ class TestTranslations(sciluigi.Task):
 
 
 class TrainAndTranslate(sciluigi.WorkflowTask):
+    in_data = None
+
     def out_translations(self):
         return TargetInfo(self, 'data/translate/output/translations.out')
 
@@ -159,4 +166,4 @@ class TrainAndTranslate(sciluigi.WorkflowTask):
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
-    luigi.run(main_task_cls=Translate, local_scheduler=True)
+    luigi.run(main_task_cls=TrainAndTranslate, local_scheduler=True)

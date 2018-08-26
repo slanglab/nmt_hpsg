@@ -21,6 +21,7 @@ parser.add_argument('-p', '--preprocess', action='store_true',
 parser.add_argument('-e', '--parser-error', action='store_true',
         help='Include parser error messages.')
 args = parser.parse_args()
+print(args)
 
 #STEP 1
 def get_tokens(derivation):
@@ -141,12 +142,11 @@ for i, fn in enumerate(os.listdir(args.directory)):
                 attr.append('NA')
 
         else:
-            preproc = None
-
             if args.preprocess:
                 attr.append('NA')
 
             if args.parser_error:
-                attr.append(parse['error'])
+                attr.append(parse['error'] if parse['error'] != '' else 'NA')
 
+        print(len(attr))
         output.write('\t'.join(attr) + '\n')
