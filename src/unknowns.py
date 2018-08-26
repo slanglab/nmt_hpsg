@@ -4,6 +4,7 @@ unks = []
 with open('src/unknowns.map', 'rt') as fh:
     for line in fh:
         unks.append(line.strip().split())
+unks.sort(key=lambda x: -len(x[0]))
 
 def replace_unk(s):
     for unk in unks:
